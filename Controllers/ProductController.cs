@@ -30,6 +30,13 @@ namespace ApiFuncional.Controllers
         }
         [HttpPost]
         public async Task<ActionResult<Product>> PostProduct(Product product) {
+
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+                
+            }
+
             _context.Products.AddAsync(product);
             _context.SaveChanges();
             return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);
@@ -37,17 +44,55 @@ namespace ApiFuncional.Controllers
 
         [HttpPut("{id:int}")]
         public async Task<ActionResult> PutProduct(int id, Product product) {
+
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+
+            }
             _context.Products.Update(product);
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!ProductExists(id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+                
+            }
+            
             return NoContent();
             
         }
-        [HttpDelete("{id:inf}")]
+        [HttpDelete("{id:int}")]
         public async Task<ActionResult> DeleteProduct(int id){ 
+
             var produto = await _context.Products.FindAsync(id);
+
+            if (produto == null)
+            {
+                return NotFound();
+            }
+
             _context.Products.Remove(produto);
             await _context.SaveChangesAsync();
             return NoContent();
+        }
+
+
+
+        //Private methods
+        private bool ProductExists(int id)
+        {
+            return (_context.Products?.Any(x => x.Id == id)).GetValueOrDefault();
         }
     }
 }
