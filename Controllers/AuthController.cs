@@ -2,6 +2,10 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 
 namespace ApiFuncional.Controllers
 {
@@ -35,7 +39,7 @@ namespace ApiFuncional.Controllers
             if (result.Succeeded)
             {
                 await _signInManager.SignInAsync(user, false);
-                return Ok(GerarJwt());
+                return Ok(GerarJwt(user.Email));
             }
 
             return Ok();
@@ -43,9 +47,51 @@ namespace ApiFuncional.Controllers
 
 
         [HttpPost("Login")]
-        public async Task<ActionResult> Login()
+        public async Task<ActionResult> Login(LaginUserViewModel loginUser)
         {
-            return Ok();
+            if (!ModelState.IsValid) { return ValidationProblem(ModelState); }
+
+            var result = await _signInManager.PasswordSignInAsync(loginUser.Email, loginUser.Password, false, true);
+
+            if (result.Succeeded)
+            {
+                return Ok(await GerarJwt(loginUser.Email));
+            }
+            return ValidationProblem("Password or User isn't correct.");
+        }
+
+
+        private async Task<string> GerarJwt(string email)
+        {
+            var user = await _userManager.FindByEmailAsync(email);
+            var roles = await _userManager.GetRolesAsync(user);
+
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.Name, user.UserName)
+            };
+
+            foreach (var role in roles) { 
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
+
+
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes(_jwtSettings.Segredo);
+
+            var token = tokenHandler.CreateToken(new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(claims),
+                Issuer = _jwtSettings.Emissor,
+                Audience = _jwtSettings.Audiencia,
+                Expires = DateTime.UtcNow.AddHours(_jwtSettings.ExpiracaoEmHoras),
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+
+            });
+            var encodedToken = tokenHandler.WriteToken(token);
+            return encodedToken;
         }
     }
+
+    
 }
